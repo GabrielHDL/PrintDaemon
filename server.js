@@ -46,6 +46,7 @@ app.post("/printturn", async (req, res) => {
 
       // 4. Imprimir el contenido (mismo formato que tu ejemplo USB)
       printer
+        .align("CT")
         .text(`Orden #${orderIdString}`)
         .text(`Total: $${parseFloat(total).toFixed(2)} MXN`)
         .qrimage(orderIdString, { type: "png", mode: "dhdw" }, (err) => {
@@ -109,16 +110,21 @@ app.post("/printticket", async (req, res) => {
     iva = 0,
     total = 0,
     footer = `¡Gracias por comprar en ${header}!`,
+    image,
   } = req.body;
 
   try {
     // 1. Crear el dispositivo de red con la IP y puerto
     const device = new escpos.Network(printerIP, printerPort);
 
-    const options = { encoding: "CP858" };
+    const options = { encoding: "ISO8859-1" };
 
     // 2. Crear la instancia de la impresora
     const printer = new escpos.Printer(device, options);
+
+    const dateHour = new Date().toLocaleString("es-MX", {
+      timeZone: "America/Mexico_City",
+    });
 
     // 3. Abrir la conexión con la impresora
     device.open((error) => {
@@ -127,32 +133,61 @@ app.post("/printticket", async (req, res) => {
         return res.status(500).json({ error: "Error abriendo el dispositivo" });
       }
 
-      // 4. Comenzar la impresión:
+      // 4. Imprimir el contenido
       // -- Ejemplo: centrar y poner nombre de la tienda (header)
       printer
         .align("CT")
         .style("B") // 'B' = negrita, 'NORMAL' = sin estilo, 'U' = subrayado, etc.
         .text(header)
-        .text(`Numero de Orden: ${orderId}`)
+        .text(`Número de Orden: ${orderId}`)
+        .text(`Fecha: ${dateHour}`) // Agregar la fecha y hora aquí
         .text("--------------------------------");
 
       // -- Regresamos a la izquierda para imprimir la lista de items
       printer.align("LT").style("NORMAL");
 
+      // Definir el ancho máximo para la línea completa (ajústalo según tu impresora)
+      const maxLineWidth = 42; // Para 80mm, normalmente 42-48 caracteres
+      const priceWidth = 10; // Espacio reservado para el precio
+      const textWidth = maxLineWidth - priceWidth; // Espacio para el nombre y cantidad
+      const formatCurrency = (amount) => {
+        return `$${parseFloat(amount).toLocaleString("es-MX", {
+          minimumFractionDigits: 2,
+        })}`;
+      };
+
       // 5. Imprimir cada artículo (items)
       items.forEach((item) => {
         const { name, price, quantity } = item;
-        // Puedes formatear líneas como gustes; aquí un ejemplo rápido:
-        printer.text(`${quantity} x ${name}`);
-        printer.text(`   $${parseFloat(price).toFixed(2)} c/u`);
+
+        // Formatear el texto del producto
+        const itemText = `${quantity} x ${name}`.padEnd(textWidth, " ");
+        const priceText = formatCurrency(price * quantity).padStart(
+          priceWidth,
+          " "
+        );
+
+        printer.text(itemText + priceText);
       });
 
-      // 6. Imprimir subtotales y total
-      printer.text("--------------------------------");
-      printer.text(`Subtotal: $${parseFloat(subtotal).toFixed(2)}`);
-      printer.text(`IVA: $${parseFloat(iva).toFixed(2)}`);
-      printer.text(`Total: $${parseFloat(total).toFixed(2)}`);
-      printer.text("--------------------------------");
+      // 6. Imprimir subtotales y total alineados a la derecha
+      printer.text("-".repeat(maxLineWidth));
+
+      const formatRight = (label, amount) => {
+        const labelText = label.padEnd(maxLineWidth - priceWidth, " ");
+        const amountText = formatCurrency(amount).padStart(priceWidth, " ");
+        return labelText + amountText;
+      };
+
+      printer.text(formatRight("Subtotal:", subtotal));
+      printer.text(formatRight("IVA:", iva));
+      // Total en grande y en negrita
+      printer
+        .size(0, 1) // Tamaño grande
+        .text(formatRight("Total:", total))
+        .size(0, 0); // Restablecer tamaño de texto
+
+      printer.text("-".repeat(maxLineWidth));
 
       // 7. Mensaje final (footer)
       printer.align("CT").style("B").text(footer);
@@ -209,10 +244,10 @@ app.post("/cashdrawer", async (req, res) => {
         .json({ message: "Caja registradora abierta exitosamente" });
     });
   } catch (error) {
-    console.error("Error abriendo la caja registradora:", error);
-    return res
-      .status(500)
-      .json({ error: "Error abriendo la caja registradora" });
+    // console.error("Error abriendo la caja registradora:", error);
+    // return res
+    //   .status(500)
+    //   .json({ error: "Error abriendo la caja registradora" });
   }
 });
 

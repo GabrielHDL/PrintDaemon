@@ -16,6 +16,8 @@
     "escpos-network": "^3.0.0-alpha.5",
     "escpos-usb": "^3.0.0-alpha.4",
     "express": "^4.21.2",
+    "jpeg-js": "^0.4.4",
+    "png-js": "^1.0.0",
     "usb": "^2.14.0"
   }
 }
