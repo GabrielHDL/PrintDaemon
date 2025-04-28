@@ -110,7 +110,6 @@ app.post("/printticket", async (req, res) => {
     iva = 0,
     total = 0,
     footer = `¡Gracias por comprar en ${header}!`,
-    image,
   } = req.body;
 
   try {
