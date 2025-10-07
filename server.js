@@ -210,6 +210,158 @@ app.post("/printticket", async (req, res) => {
 });
 
 /**
+ * Ruta para imprimir un recibo de pago de préstamo
+ * Espera en el body (JSON):
+ * {
+ *   "printerIP": "192.168.1.100",
+ *   "printerPort": 9100,
+ *   "header": "Astrova",
+ *   "loanId": "PRE-000123",
+ *   "borrower": "Juan Pérez",
+ *   "paymentId": "RC-2025-0001",         // opcional (número de recibo)
+ *   "paymentDate": "2025-07-01T16:20:00Z",// opcional, ISO o fecha válida
+ *   "method": "Efectivo",                 // opcional
+ *   "reference": "CAJA-1",                // opcional
+ *   "principal": 1000,                     // capital pagado
+ *   "interest": 120,                       // interés pagado
+ *   "amount": 1120,                        // total pagado
+ *   "remainingBalance": 3880,              // saldo restante
+ *   "nextDueDate": "2025-08-01",          // opcional
+ *   "footer": "¡Gracias por su pago!"     // opcional
+ * }
+ */
+app.post("/printloanpayment", async (req, res) => {
+  const {
+    printerIP,
+    printerPort,
+    header = "Astrova",
+    loanId,
+    borrower,
+    paymentId,
+    paymentDate,
+    method,
+    reference,
+    principal = 0,
+    interest = 0,
+    amount = 0,
+    remainingBalance = 0,
+    nextDueDate,
+    footer = "¡Gracias por su pago!",
+  } = req.body;
+
+  // Validaciones mínimas
+  if (!printerIP || !printerPort) {
+    return res
+      .status(400)
+      .json({ error: "printerIP y printerPort son requeridos" });
+  }
+
+  try {
+    const device = new escpos.Network(printerIP, printerPort);
+    const options = { encoding: "ISO8859-1" };
+    const printer = new escpos.Printer(device, options);
+
+    const dateHour = (() => {
+      const d = paymentDate ? new Date(paymentDate) : new Date();
+      return d.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+    })();
+
+    device.open((error) => {
+      if (error) {
+        console.error("Error abriendo el dispositivo:", error);
+        return res.status(500).json({ error: "Error abriendo el dispositivo" });
+      }
+
+      // Configuración de formato
+      const maxLineWidth = 42; // típico 80mm
+      const priceWidth = 12; // ancho para montos
+      const textWidth = maxLineWidth - priceWidth;
+
+      const toNumber = (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const formatCurrency = (amount) =>
+        `$${toNumber(amount).toLocaleString("es-MX", {
+          minimumFractionDigits: 2,
+        })}`;
+
+      const formatRight = (label, amount) => {
+        const labelText = String(label).padEnd(textWidth, " ");
+        const amountText = formatCurrency(amount).padStart(priceWidth, " ");
+        return labelText + amountText;
+      };
+
+      // Impresión del recibo
+      try {
+        printer
+          .align("CT")
+          .style("B")
+          .text(header || "")
+          .text("Pago de Préstamo")
+          .style("NORMAL")
+          .text(`Fecha: ${dateHour}`)
+          .text("--------------------------------");
+
+        printer.align("LT");
+
+        if (loanId) printer.text(`Préstamo: ${loanId}`);
+        if (borrower) printer.text(`Cliente: ${borrower}`);
+        if (paymentId) printer.text(`Recibo: ${paymentId}`);
+        if (method) printer.text(`Método: ${method}`);
+        if (reference) printer.text(`Referencia: ${reference}`);
+        if (nextDueDate) printer.text(`Próximo pago: ${nextDueDate}`);
+
+        printer.text("-".repeat(maxLineWidth));
+
+        // Desglose de pago
+        printer.text(formatRight("Capital:", principal));
+        printer.text(formatRight("Interés:", interest));
+        printer
+          .style("B")
+          .size(0, 1)
+          .text(formatRight("Total Pagado:", amount))
+          .size(0, 0)
+          .style("NORMAL");
+
+        printer.text("-".repeat(maxLineWidth));
+
+        // Saldo restante destacado
+        printer
+          .style("B")
+          .text(formatRight("Saldo Restante:", remainingBalance))
+          .style("NORMAL");
+
+        printer.text("--------------------------------");
+        printer
+          .align("CT")
+          .style("B")
+          .text(footer || "")
+          .style("NORMAL");
+
+        // Corte y cierre
+        printer.cut();
+        printer.close();
+
+        return res
+          .status(200)
+          .json({ message: "Recibo de pago impreso exitosamente" });
+      } catch (printErr) {
+        console.error("Error durante la impresión:", printErr);
+        try {
+          printer.close();
+        } catch (_) {}
+        return res.status(500).json({ error: "Error durante la impresión" });
+      }
+    });
+  } catch (error) {
+    console.error("Error general al imprimir el recibo:", error);
+    return res.status(500).json({ error: "Error imprimiendo el recibo" });
+  }
+});
+
+/**
  * Ruta para abrir la caja registradora
  * Recibe en el body:
  *  {
