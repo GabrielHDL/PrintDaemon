@@ -245,6 +245,7 @@ app.post("/printloanpayment", async (req, res) => {
     interest = 0,
     amount = 0,
     remainingBalance = 0,
+    totalOutstandingDebt = 0,
     nextDueDate,
     footer = "¡Gracias por su pago!",
   } = req.body;
@@ -331,6 +332,12 @@ app.post("/printloanpayment", async (req, res) => {
         printer
           .style("B")
           .text(formatRight("Saldo Restante:", remainingBalance))
+          .style("NORMAL");
+
+        // Mostrar la deuda global pendiente del colaborador
+        printer
+          .style("B")
+          .text(formatRight("Deuda Total Pend.:", totalOutstandingDebt))
           .style("NORMAL");
 
         printer.text("--------------------------------");
